@@ -20,4 +20,4 @@ function named arguments
 remove extra code which isn't used
 
 Suggestions: BaseRepository.php if we convert into facade, will be more effecient according to me.
-Note: there are more changes required in refactor, Please let me know if there is anything else required. Thanks
+Note: there are changes required in refactor, Please let me know if there is anything else required. Thanks
