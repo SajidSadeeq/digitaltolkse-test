@@ -1246,7 +1246,7 @@ class BookingRepository extends BaseRepository
      * Function to send the notification for sending the admin job cancel
      * @param $job_id
      */
-    public function sendNotificationByAdminCancelJob($job_id)
+    public function sendNotificationByAdminCancelJob(int $job_id)
     {
         $job = Job::findOrFail($job_id);
         $user_meta = $job->user->userMeta()->first();
@@ -1266,10 +1266,9 @@ class BookingRepository extends BaseRepository
         $data['customer_type'] = $user_meta->customer_type;
 
         $due_Date = explode(" ", $job->due);
-        $due_date = $due_Date[0];
-        $due_time = $due_Date[1];
-        $data['due_date'] = $due_date;
-        $data['due_time'] = $due_time;
+        $data['due_date'] = $due_Date[0];
+        $data['due_time'] = $due_Date[1];
+
         $data['job_for'] = array();
         if ($job->gender != null) {
             if ($job->gender == 'male') {
@@ -1304,13 +1303,16 @@ class BookingRepository extends BaseRepository
         $data = array();
         $data['notification_type'] = 'session_start_remind';
         if ($job->customer_physical_type == 'yes')
+        {
             $msg_text = array(
                 "en" => 'Du har nu fått platstolkningen för ' . $language . ' kl ' . $duration . ' den ' . $due . '. Vänligen säkerställ att du är förberedd för den tiden. Tack!'
             );
-        else
+        }
+        else{
             $msg_text = array(
                 "en" => 'Du har nu fått telefontolkningen för ' . $language . ' kl ' . $duration . ' den ' . $due . '. Vänligen säkerställ att du är förberedd för den tiden. Tack!'
             );
+        }
 
         if ($this->bookingRepository->isNeedToSendPush($user->id)) {
             $users_array = array($user);
@@ -1323,14 +1325,11 @@ class BookingRepository extends BaseRepository
      * @param $users
      * @return string
      */
-    private function getUserTagsStringFromArray($users)
+    private function getUserTagsStringFromArray(mixed $users)
     {
         $user_tags = "[";
-        $first = true;
-        foreach ($users as $oneUser) {
-            if ($first) {
-                $first = false;
-            } else {
+        foreach ($users as $key => $oneUser) {
+            if ($key > 0) {
                 $user_tags .= ',{"operator": "OR"},';
             }
             $user_tags .= '{"key": "email", "relation": "=", "value": "' . strtolower($oneUser->email) . '"}';
@@ -1654,22 +1653,31 @@ class BookingRepository extends BaseRepository
         if ($cuser && $cuser->user_type == env('SUPERADMIN_ROLE_ID')) {
             $allJobs = Job::query();
 
-            if (isset($requestdata['feedback']) && $requestdata['feedback'] != 'false') {
-                $allJobs->where('ignore_feedback', '0');
-                $allJobs->whereHas('feedback', function ($q) {
+            $allJobs->when($requestdata['feedback'], function($q){
+                $q->where('ignore_feedback', '0');
+                $q->whereHas('feedback', function ($q) {
                     $q->where('rating', '<=', '3');
                 });
-                if (isset($requestdata['count']) && $requestdata['count'] != 'false') return ['count' => $allJobs->count()];
-            }
+                return $q;
+            });
+            if (isset($requestdata['count']) && $requestdata['count'] != 'false') return ['count' => $allJobs->count()];
 
-            if (isset($requestdata['id']) && $requestdata['id']) {
+            $allJobs->when($requestdata['id'], function($q) use ($requestdata){
                 if (is_array($requestdata['id']))
-                    $allJobs->whereIn('id', $requestdata['id']);
+                    $q->whereIn('id', $requestdata['id']);
                 else
-                    $allJobs->where('id', $requestdata['id']);
+                    $q->where('id', $requestdata['id']);
                 $requestdata = array_only($requestdata, ['id']);
-            }
+                return $q;
+            });
 
+            $allJobs->when($requestdata['id'], function($q) use ($requestdata){
+                return $q->whereIn('from_language_id', $requestdata['lang']);
+            });
+            /**
+             * Using when() we refactor this, reading will be better as well.
+             * 
+             */
             if (isset($requestdata['lang']) && $requestdata['lang']) {
                 $allJobs->whereIn('from_language_id', $requestdata['lang']);
             }
@@ -1682,7 +1690,7 @@ class BookingRepository extends BaseRepository
             if (isset($requestdata['will_expire_at']) && $requestdata['will_expire_at']) {
                 $allJobs->where('will_expire_at', '>=', $requestdata['will_expire_at']);
             }
-            if (isset($requestdata['customer_email']) && count($requestdata['customer_email']) && $requestdata['customer_email'] != '') {
+            if (isset($requestdata['customer_email']) && count($requestdata['customer_email']) && $requestdata['customer_email']) {
                 $users = DB::table('users')->whereIn('email', $requestdata['customer_email'])->get();
                 if ($users) {
                     $allJobs->whereIn('user_id', collect($users)->pluck('id')->all());
@@ -1718,7 +1726,6 @@ class BookingRepository extends BaseRepository
 
             if (isset($requestdata['job_type']) && $requestdata['job_type'] != '') {
                 $allJobs->whereIn('job_type', $requestdata['job_type']);
-                /*$allJobs->where('jobs.job_type', '=', $requestdata['job_type']);*/
             }
 
             if (isset($requestdata['physical'])) {
